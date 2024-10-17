@@ -101,7 +101,7 @@ func run(ctx context.Context, getenv EnvGetter) error {
 
 	// setup the graceful shutdown mechanism
 	errChan := make(chan error)
-	go shutdown(ctx, srv, errChan, 30*time.Second)
+	go shutdown(ctx, srv, errChan, 30*time.Second)()
 
 	// start the webserver until it is terminated
 	if err := srv.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
