@@ -11,6 +11,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"os/signal"
@@ -75,7 +76,7 @@ const (
 )
 
 // run sets up and executes our program in a testable manner
-func run(ctx context.Context, getenv EnvGetter) error {
+func run(ctx context.Context, getenv EnvGetter, stdout io.Writer) error {
 	// setup the signal handlers to interrupt correctly on Ctrl-C as done by
 	// a user, or by SIGTERM done by process managers like Kubernetes
 	ctx, cancel := signal.NotifyContext(ctx, os.Interrupt, syscall.SIGTERM)
@@ -92,8 +93,10 @@ func run(ctx context.Context, getenv EnvGetter) error {
 	mux.Handle("GET /hello/{name}", handleHello()) // This format requires go1.22 or later
 	// configure the server
 	srv := &http.Server{
-		Addr:           hostport,
-		Handler:        mux,
+		Addr:    hostport,
+		Handler: mux,
+		// The timeouts are related to the graceful shutdown of your request handlers,
+		// if a handler does not complete in this time the client will get an "Empty reply from server" type error
 		ReadTimeout:    httpReadTimeout,
 		WriteTimeout:   httpWriteTimeout,
 		MaxHeaderBytes: httpMaxHeaderBytes,
@@ -103,13 +106,15 @@ func run(ctx context.Context, getenv EnvGetter) error {
 	errChan := make(chan error)
 	go shutdown(ctx, srv, errChan, 30*time.Second)()
 
+	fmt.Fprintf(stdout, "Listening on hostport %v\n", hostport)
 	// start the webserver until it is terminated
 	if err := srv.ListenAndServe(); !errors.Is(err, http.ErrServerClosed) {
 		return err
 	}
+	fmt.Fprintln(stdout, "Stopped serving new connections.")
 	// pull the error from the graceful shutdown if any
 	err := <-errChan
-
+	fmt.Fprintln(stdout, "Shutdown completed.")
 	return err
 }
 
@@ -120,7 +125,7 @@ const (
 func main() {
 	ctx := context.Background()
 	// start the main code execution
-	if err := run(ctx, os.Getenv); err != nil {
+	if err := run(ctx, os.Getenv, os.Stdout); err != nil {
 		fmt.Fprintf(os.Stderr, "%s\n", err)
 		os.Exit(errorExitCode)
 	}

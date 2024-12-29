@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -190,8 +191,10 @@ func TestRun(t *testing.T) {
 
 	// start the server in the background
 	go func() {
+		// dump the stdout into a buffer we discard later
+		var stdout bytes.Buffer
 		// since the server returns an error we need to check it
-		err := run(ctx, getenv)
+		err := run(ctx, getenv, &stdout)
 		if err != nil {
 			t.Errorf("error during program execution, got %s", err)
 		}
